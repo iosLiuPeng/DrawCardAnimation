@@ -19,6 +19,7 @@ typedef NS_ENUM(NSUInteger, CardStatus) {
 typedef NS_ENUM(NSUInteger, AnimationStatus) {
     AnimationStatus_Start,       ///< 已开始
     AnimationStatus_WaitMoveUp,  ///< 待上移
+    AnimationStatus_MoveUping,   ///< 上移中
     AnimationStatus_DidMoveUp,   ///< 已上移
     AnimationStatus_WaitDismiss, ///< 将要消失
     AnimationStatus_DidDismiss,  ///< 已经消失
@@ -61,6 +62,9 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
 @property (nonatomic, copy) GetResultBlock resultBlock;///< 获取卡牌结果回调
 @property (nonatomic, copy) DidCompleteBlock completeBlock;///< 动画完成回调
 @end
+
+
+static NSInteger maxDrawCards = 3;///< 最大抽牌数
 
 #define ExtendAnimationKey @"ExtendAnimationKey"/// 展开动画key
 #define ScaleAnimationKey @"ScaleAnimationKey"/// 放大动画key
@@ -225,7 +229,7 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
     NSArray *arrBg = @[_viewCardBg1, _viewCardBg2, _viewCardBg3];
     NSArray *arrTips = @[@"Choose The Love Card", @"Choose The Fortune Card", @"Choose The Career Card"];
     
-    for (NSInteger i = 0; i < 3; i++) {
+    for (NSInteger i = 0; i < maxDrawCards; i++) {
         UIView *border = arrBorder[i];
         border.hidden = index == i? NO: YES;
         
@@ -239,7 +243,7 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
         bg.hidden = i < index ? YES: NO;
     }
     
-    if (index < 3) {
+    if (index < maxDrawCards) {
         _lblTip.text = arrTips[index];
     } else {
         // 选牌结束
@@ -279,7 +283,14 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
             UIView *cardView = arrView[self.currentIndex - 1];
             CGPoint targetPoint = [cardView.superview convertPoint:cardView.center toView:self];
             
-            if (fabs(currentPoint.x - targetPoint.x) <= 20 && fabs(currentPoint.y - targetPoint.y) <= 30) {
+            if (fabs(currentPoint.x - targetPoint.x) <= 30 && fabs(currentPoint.y - targetPoint.y) <= 40) {
+                // 选牌结束
+                if (_currentIndex == maxDrawCards) {
+                    for (UIImageView *imgView in self.arrCard) {
+                        imgView.userInteractionEnabled = NO;
+                    }
+                }
+                
                 // 在有效范围内
                 pan.view.transform = CGAffineTransformIdentity;
                 pan.view.center = targetPoint;
@@ -316,7 +327,7 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
     // 创建牌堆
     [self createCardPile];
     
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         // 牌堆展开动画
         [self startCardExtendAnimation];
     });
@@ -329,7 +340,9 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
     _stackView.alpha = 0.0;
     _stackView.hidden = NO;
     
-    [UIView animateWithDuration:2 animations:^{
+    self.animStatus = AnimationStatus_MoveUping;
+    
+    [UIView animateWithDuration:1 animations:^{
         for (UIImageView *imgView in self.arrCard) {
             imgView.center = CGPointMake(imgView.center.x + offset.x, imgView.center.y + offset.y);
         }
@@ -337,6 +350,8 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
         self.stackView.alpha = 1.0;
     } completion:^(BOOL finished) {
         self.lblTip.hidden = NO;
+        
+        self.animStatus = AnimationStatus_DidMoveUp;
         
         for (UIImageView *imgView in self.arrCard) {
             imgView.userInteractionEnabled = YES;
@@ -391,7 +406,7 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
 /// 翻牌动画
 - (void)startFlipAnimation:(NSArray *)arrName
 {
-    if (arrName.count < 3) {
+    if (arrName.count < maxDrawCards) {
         // 直接结束
         if (self.completeBlock) {
             self.completeBlock();
@@ -413,8 +428,7 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
             } completion:^(BOOL finished) {
                 if (i == 2) {
                     // 全部结束
-//                    self.hidden = YES;
-                    
+
                     // 回调
                     if (self.completeBlock) {
                         self.completeBlock();
@@ -451,6 +465,7 @@ typedef NS_ENUM(NSUInteger, AnimationStatus) {
             
             if (self.resultBlock) {
                 arrName = self.resultBlock();
+                self.resultBlock = nil;
             }
     
             // 翻牌动画
